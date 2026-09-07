@@ -22,6 +22,7 @@ const els = {
   all: document.getElementById('all-sets-view'),
   allList: document.getElementById('all-sets-list'),
   tripoStatus: document.getElementById('tripo-status'),
+  clearCurrent: document.getElementById('delete-current'),
   clearAll: document.getElementById('clear-all'),
   toast: document.getElementById('toast')
 };
@@ -40,6 +41,7 @@ async function boot() {
 function bindEvents() {
   window.addEventListener('paste', handlePaste);
   els.fill.addEventListener('click', fillCurrentSetToTripo);
+  els.clearCurrent.addEventListener('click', deleteCurrentSet);
   els.clearAll.addEventListener('click', clearAll);
 }
 
@@ -258,6 +260,8 @@ function updateActions(set) {
   els.setStatus.className = `chip ${ready ? 'chip-success' : 'chip-warning'}`;
   els.setStatus.textContent = ready ? '4 / 4 READY' : `${count} / 4 COLLECTING`;
   els.fill.disabled = !ready || state.showAll;
+  els.clearCurrent.disabled = state.showAll || count === 0;
+  els.clearAll.disabled = state.order.length === 0;
 }
 
 async function fillCurrentSetToTripo() {
@@ -336,13 +340,36 @@ async function refreshTripoStatus() {
   }
 }
 
+async function deleteCurrentSet() {
+  const sets = getSets();
+  const current = sets[state.activeSet] || [];
+  if (!current.length || state.showAll) return;
+
+  const setLabel = `SET ${pad(state.activeSet + 1)}`;
+  if (!confirm(`删除 ${setLabel} 及其中的 ${current.length} 张图片？`)) return;
+
+  await deleteImages(current);
+  state.order.splice(state.activeSet * 4, current.length);
+
+  const remainingSets = getSets();
+  state.activeSet = remainingSets.length
+    ? Math.min(state.activeSet, remainingSets.length - 1)
+    : 0;
+  state.showAll = false;
+
+  await saveState();
+  await render();
+  showToast(`${setLabel} 已删除。`, 'success');
+}
+
 async function clearAll() {
   if (!state.order.length) return;
-  if (!confirm('Clear every pasted image and set?')) return;
+  if (!confirm('删除全部组和所有图片？')) return;
   await clearImages();
   state = { order: [], activeSet: 0, showAll: false };
   await saveState();
   await render();
+  showToast('全部图片已删除。', 'success');
 }
 
 function getSets() {
@@ -413,6 +440,19 @@ async function getAllImageIds() {
     const request = tx.objectStore(STORE_IMAGES).getAllKeys();
     request.onsuccess = () => resolve(request.result || []);
     request.onerror = () => reject(request.error);
+  });
+}
+
+async function deleteImages(ids) {
+  if (!ids.length) return;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_IMAGES, 'readwrite');
+    const store = tx.objectStore(STORE_IMAGES);
+    for (const id of ids) store.delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('Delete transaction aborted.'));
   });
 }
 
