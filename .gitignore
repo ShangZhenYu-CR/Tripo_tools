@@ -3,6 +3,14 @@
 /private/
 *.crx
 *.pem
+*.key
+*.p12
+*.pfx
+*private-key*
+
+# Environment / secret files
+.env
+.env.*
 
 # Temporary packaging output
 /.pack-temp/
