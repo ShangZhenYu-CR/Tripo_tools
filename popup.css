@@ -21,7 +21,7 @@ html, body {
   max-width: 760px;
   height: 600px;
   overflow: hidden;
-  background: var(--bg-canvas);
+  background: transparent;
   color: var(--text);
   font-family: Inter, "Segoe UI", sans-serif;
 }
@@ -38,6 +38,7 @@ button { font: inherit; }
   border-radius: 14px;
   box-shadow: none;
   overflow: hidden;
+  clip-path: inset(0 round 14px);
 }
 
 .topbar {
@@ -50,6 +51,7 @@ button { font: inherit; }
   padding: 9px 14px;
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
+  border-radius: 14px 14px 0 0;
 }
 .title { font-size: 14px; line-height: 18px; font-weight: 650; }
 .subtitle { margin-top: 2px; font-size: 10px; line-height: 13px; color: var(--muted); }
@@ -169,6 +171,7 @@ button { font: inherit; }
   gap: 8px;
   padding: 7px 12px;
   background: var(--bg-panel);
+  border-radius: 0 0 14px 14px;
 }
 .chip {
   display: inline-flex;
