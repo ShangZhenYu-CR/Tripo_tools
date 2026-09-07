@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tripo Multiview Paste</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="title">Tripo Multiview Paste</div>
+        <div class="subtitle">4 images = 1 set · FRONT / LEFT / RIGHT / BACK</div>
+      </div>
+      <span id="tripo-status" class="chip chip-warning">TRIPO ?</span>
+    </header>
+
+    <section class="controls">
+      <div id="set-tabs" class="set-tabs"></div>
+      <button id="clear-all" class="icon-btn" title="Clear all pasted images">×</button>
+    </section>
+
+    <section id="single-set-view" class="single-set-view">
+      <div id="view-grid" class="view-grid"></div>
+    </section>
+
+    <section id="all-sets-view" class="all-sets-view" hidden>
+      <div id="all-sets-list" class="all-sets-list"></div>
+    </section>
+
+    <footer class="footerbar">
+      <span id="set-status" class="chip chip-warning">0 / 4 COLLECTING</span>
+      <button id="fill-tripo" class="primary-btn" disabled>Fill Tripo</button>
+    </footer>
+
+    <div id="toast" class="toast" hidden></div>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>
