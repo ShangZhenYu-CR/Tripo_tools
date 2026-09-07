@@ -2,9 +2,16 @@ const ext = globalThis.browser ?? globalThis.chrome;
 // Current Tripo Multiview slot order verified by the real page: FRONT / LEFT / RIGHT / BACK.
 const DIRECTION_ORDER = ['front', 'left', 'right', 'back'];
 const stagedImages = new Array(4).fill(null);
+const PANEL_HOST_ID = 'tripo-multiview-paste-floating-panel';
 
 ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== 'object') return;
+
+  if (message.type === 'TMP_TOGGLE_PANEL') {
+    const open = toggleFloatingPanel();
+    sendResponse({ ok: true, open });
+    return;
+  }
 
   if (message.type === 'TMP_STAGE_IMAGE') {
     try {
@@ -37,6 +44,63 @@ ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ ok: true, diagnostic: inspectUploadUi() });
   }
 });
+
+window.addEventListener('message', (event) => {
+  const data = event.data;
+  if (!data || data.source !== 'tripo-multiview-paste') return;
+  if (data.type === 'TMP_CLOSE_PANEL') closeFloatingPanel();
+});
+
+function toggleFloatingPanel() {
+  const existing = document.getElementById(PANEL_HOST_ID);
+  if (existing) {
+    existing.remove();
+    return false;
+  }
+
+  const host = document.createElement('div');
+  host.id = PANEL_HOST_ID;
+  host.setAttribute('data-tripo-multiview-paste', 'panel');
+
+  const styles = {
+    position: 'fixed',
+    top: '16px',
+    right: '16px',
+    width: 'min(760px, calc(100vw - 32px))',
+    height: 'min(600px, calc(100vh - 32px))',
+    zIndex: '2147483647',
+    border: '0',
+    borderRadius: '16px',
+    overflow: 'hidden',
+    background: 'transparent',
+    boxShadow: '0 18px 54px rgba(0, 0, 0, 0.42)',
+    isolation: 'isolate',
+    pointerEvents: 'auto'
+  };
+  for (const [key, value] of Object.entries(styles)) host.style[key] = value;
+
+  const shadow = host.attachShadow({ mode: 'closed' });
+  const iframe = document.createElement('iframe');
+  iframe.src = ext.runtime.getURL('popup.html');
+  iframe.title = 'Tripo Multiview Paste';
+  iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
+  iframe.style.width = '100%';
+  iframe.style.height = '100%';
+  iframe.style.display = 'block';
+  iframe.style.border = '0';
+  iframe.style.margin = '0';
+  iframe.style.padding = '0';
+  iframe.style.background = 'transparent';
+  iframe.style.borderRadius = '16px';
+  shadow.appendChild(iframe);
+
+  (document.body || document.documentElement).appendChild(host);
+  return true;
+}
+
+function closeFloatingPanel() {
+  document.getElementById(PANEL_HOST_ID)?.remove();
+}
 
 async function applyMultiview(images) {
   if (!Array.isArray(images) || images.length !== 4 || images.some((image) => !image?.dataUrl)) {
