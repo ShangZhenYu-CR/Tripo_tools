@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tripo Multiview Paste",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Paste clipboard images in 4-view sets and fill Tripo3D Multiview without using the Windows file picker.",
   "permissions": [
     "storage",
@@ -12,9 +12,11 @@
     "*://tripo3d.ai/*",
     "*://*.tripo3d.ai/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
-    "default_title": "Tripo Multiview Paste",
-    "default_popup": "popup.html"
+    "default_title": "Tripo Multiview Paste"
   },
   "content_scripts": [
     {
@@ -24,6 +26,19 @@
       ],
       "js": ["content-tripo.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "popup.html",
+        "popup.css",
+        "popup.js"
+      ],
+      "matches": [
+        "*://tripo3d.ai/*",
+        "*://*.tripo3d.ai/*"
+      ]
     }
   ]
 }
