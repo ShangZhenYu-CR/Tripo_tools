@@ -34,11 +34,10 @@ button { font: inherit; }
   display: flex;
   flex-direction: column;
   background: var(--bg-canvas);
-  border: 0;
-  border-radius: 14px;
+  border: 1px solid #303946;
+  border-radius: 16px;
   box-shadow: none;
   overflow: hidden;
-  clip-path: inset(0 round 14px);
 }
 
 .topbar {
@@ -48,13 +47,29 @@ button { font: inherit; }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 14px;
+  padding: 9px 10px 9px 14px;
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
-  border-radius: 14px 14px 0 0;
 }
 .title { font-size: 14px; line-height: 18px; font-weight: 650; }
 .subtitle { margin-top: 2px; font-size: 10px; line-height: 13px; color: var(--muted); }
+.topbar-actions { display: flex; align-items: center; gap: 8px; }
+.close-panel-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+.close-panel-btn:hover { color: var(--text); border-color: #465363; }
 
 .controls {
   min-height: 46px;
@@ -171,7 +186,6 @@ button { font: inherit; }
   gap: 8px;
   padding: 7px 12px;
   background: var(--bg-panel);
-  border-radius: 0 0 14px 14px;
 }
 .chip {
   display: inline-flex;
