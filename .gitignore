@@ -1,0 +1,8 @@
+# Local extension packages / private signing key
+/dist/
+/private/
+*.crx
+*.pem
+
+# Temporary packaging output
+/.pack-temp/
