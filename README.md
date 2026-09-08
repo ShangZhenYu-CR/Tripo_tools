@@ -9,14 +9,14 @@ A standalone Edge extension for clipboard-first Tripo3D Multiview uploads.
 ### Current packaged release
 
 - `v0.3.1`
-- CRX package: `releases/v0.3.1/TripoMultiviewPaste-v0.3.1.crx`
-- Release notes: `releases/v0.3.1/README.md`
+- CRX package: [Download TripoMultiviewPaste-v0.3.1.crx](https://github.com/ShangZhenYu-CR/Tripo_tools/releases/download/v0.3.1/TripoMultiviewPaste-v0.3.1.crx)
+- Release notes: [v0.3.1 on GitHub Releases](https://github.com/ShangZhenYu-CR/Tripo_tools/releases/tag/v0.3.1)
 
 ### Current workflow
 
 1. Open Tripo3D and switch to **Multiview** mode.
 2. Open `edge://extensions/` and enable **Developer mode**.
-3. Choose **Load unpacked** and select this repository folder, or install the packaged CRX from `releases/v0.3.1/`.
+3. Choose **Load unpacked** and select this repository folder, or install the packaged CRX from [GitHub Releases](https://github.com/ShangZhenYu-CR/Tripo_tools/releases/tag/v0.3.1).
 4. Refresh the already-open Tripo tab once after installing or updating the extension.
 5. Click the **Tripo Multiview Paste** extension icon.
 6. Paste images with `Ctrl+V`.
