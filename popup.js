@@ -6,6 +6,7 @@ const STORE_IMAGES = 'images';
 const STORAGE_KEY = 'tmpPopupState';
 // Tripo's current Multiview order is FRONT / LEFT / RIGHT / BACK.
 const DIRECTIONS = ['FRONT', 'LEFT', 'RIGHT', 'BACK'];
+const MIN_SEND_VIEWS = 3;
 
 let dbPromise = null;
 let state = { order: [], activeSet: 0, showAll: false };
@@ -58,6 +59,7 @@ async function handlePaste(event) {
   if (!files.length) return;
 
   event.preventDefault();
+  let lastPlacedIndex = 0;
   for (const file of files) {
     const id = crypto.randomUUID();
     await putImage({
@@ -67,14 +69,34 @@ async function handlePaste(event) {
       name: file.name || `clipboard-${Date.now()}.png`,
       createdAt: Date.now()
     });
-    state.order.push(id);
+    lastPlacedIndex = placeImageInNextAvailableSlot(id);
   }
 
-  state.activeSet = Math.floor((state.order.length - 1) / 4);
+  state.activeSet = Math.floor(lastPlacedIndex / 4);
   state.showAll = false;
   await saveState();
   await render();
   showToast(`${files.length} image${files.length === 1 ? '' : 's'} pasted.`, 'success');
+}
+
+function placeImageInNextAvailableSlot(id) {
+  if (!state.order.length) {
+    state.order[0] = id;
+    return 0;
+  }
+
+  const lastSetIndex = Math.max(0, Math.ceil(state.order.length / 4) - 1);
+  const start = lastSetIndex * 4;
+  for (let index = start; index < start + 4; index++) {
+    if (!state.order[index]) {
+      state.order[index] = id;
+      return index;
+    }
+  }
+
+  const nextIndex = (lastSetIndex + 1) * 4;
+  state.order[nextIndex] = id;
+  return nextIndex;
 }
 
 async function render() {
@@ -100,14 +122,18 @@ function renderTabs(sets) {
   els.tabs.replaceChildren();
   for (let index = 0; index < sets.length; index++) {
     const set = sets[index] || [];
+    const count = countImages(set);
     const button = document.createElement('button');
     button.className = 'set-tab';
     if (!state.showAll && state.activeSet === index) button.classList.add('active');
-    if (set.length > 0 && set.length < 4 && (state.showAll || state.activeSet !== index)) {
+    if ((state.showAll || state.activeSet !== index) && count > 0 && count < MIN_SEND_VIEWS) {
       button.classList.add('collecting');
     }
-    button.textContent = set.length > 0 && set.length < 4
-      ? `SET ${pad(index + 1)} · ${set.length}/4`
+    if ((state.showAll || state.activeSet !== index) && count >= MIN_SEND_VIEWS && count < 4) {
+      button.classList.add('partial-ready');
+    }
+    button.textContent = count > 0 && count < 4
+      ? `SET ${pad(index + 1)} · ${count}/4`
       : `SET ${pad(index + 1)}`;
     button.addEventListener('click', async () => {
       state.activeSet = index;
@@ -147,6 +173,7 @@ async function renderAllSets(sets) {
   els.allList.replaceChildren();
   for (let setIndex = 0; setIndex < sets.length; setIndex++) {
     const set = sets[setIndex] || [];
+    const count = countImages(set);
     const wrapper = document.createElement('article');
     wrapper.className = 'set-overview';
 
@@ -156,8 +183,9 @@ async function renderAllSets(sets) {
     title.className = 'set-overview-title';
     title.textContent = `SET ${pad(setIndex + 1)}`;
     const chip = document.createElement('span');
-    chip.className = `chip ${set.length === 4 ? 'chip-success' : 'chip-warning'}`;
-    chip.textContent = set.length === 4 ? '4 / 4 READY' : `${set.length} / 4 COLLECTING`;
+    const ready = count >= MIN_SEND_VIEWS;
+    chip.className = `chip ${ready ? 'chip-success' : 'chip-warning'}`;
+    chip.textContent = ready ? `${count} / 4 READY` : `${count} / 4 COLLECTING`;
     header.append(title, chip);
 
     const grid = document.createElement('div');
@@ -205,6 +233,8 @@ function makeViewCard(record, direction, options = {}) {
   if (options.draggable) {
     card.addEventListener('dragstart', onDragStart);
     card.addEventListener('dragend', onDragEnd);
+  }
+  if (Number.isInteger(options.globalIndex)) {
     card.addEventListener('dragover', onDragOver);
     card.addEventListener('dragleave', onDragLeave);
     card.addEventListener('drop', onDrop);
@@ -245,7 +275,12 @@ async function onDrop(event) {
   if (!Number.isInteger(sourceIndex) || !Number.isInteger(targetIndex)) return;
   if (!sameSet(sourceIndex, targetIndex) || sourceIndex === targetIndex) return;
 
-  [state.order[sourceIndex], state.order[targetIndex]] = [state.order[targetIndex], state.order[sourceIndex]];
+  const sourceId = state.order[sourceIndex] || null;
+  if (!sourceId) return;
+  const targetId = state.order[targetIndex] || null;
+  state.order[sourceIndex] = targetId;
+  state.order[targetIndex] = sourceId;
+  trimTrailingEmptySlots();
   await saveState();
   await render();
 }
@@ -254,19 +289,24 @@ function sameSet(a, b) {
   return Math.floor(a / 4) === Math.floor(b / 4);
 }
 
+function countImages(set) {
+  return (set || []).filter((id) => typeof id === 'string' && id).length;
+}
+
 function updateActions(set) {
-  const count = set.length;
-  const ready = count === 4;
+  const count = countImages(set);
+  const ready = count >= MIN_SEND_VIEWS;
   els.setStatus.className = `chip ${ready ? 'chip-success' : 'chip-warning'}`;
-  els.setStatus.textContent = ready ? '4 / 4 READY' : `${count} / 4 COLLECTING`;
+  els.setStatus.textContent = ready ? `${count} / 4 READY` : `${count} / 4 COLLECTING`;
   els.fill.disabled = !ready || state.showAll;
   els.clearCurrent.disabled = state.showAll || count === 0;
-  els.clearAll.disabled = state.order.length === 0;
+  els.clearAll.disabled = !state.order.some((id) => typeof id === 'string' && id);
 }
 
 async function fillCurrentSetToTripo() {
-  const set = (getSets()[state.activeSet] || []);
-  if (set.length !== 4) return;
+  const set = getSets()[state.activeSet] || [];
+  const count = countImages(set);
+  if (count < MIN_SEND_VIEWS) return;
 
   const tab = await findTripoTab();
   if (!tab?.id) {
@@ -278,9 +318,14 @@ async function fillCurrentSetToTripo() {
   els.fill.disabled = true;
   els.fill.textContent = 'Filling…';
   try {
-    // Stage one image per message to avoid one large 4-image extension message.
+    const reset = await ext.tabs.sendMessage(tab.id, { type: 'TMP_RESET_MULTIVIEW' });
+    if (!reset?.ok) throw new Error('Refresh the Tripo tab once after updating this extension.');
+
+    // Stage only occupied slots. Empty directions stay empty instead of shifting later views forward.
     for (let i = 0; i < 4; i++) {
-      const record = await getImage(set[i]);
+      const id = set[i];
+      if (!id) continue;
+      const record = await getImage(id);
       if (!record?.blob) throw new Error(`Missing ${DIRECTIONS[i]} image.`);
       const payload = {
         direction: DIRECTIONS[i].toLowerCase(),
@@ -301,7 +346,7 @@ async function fillCurrentSetToTripo() {
       const detail = result?.diagnostic ? `\n${JSON.stringify(result.diagnostic)}` : '';
       throw new Error((result?.error || 'Unable to fill Tripo.') + detail);
     }
-    showToast(result.message || 'Filled Tripo multiview.', 'success');
+    showToast(result.message || `Filled ${count} Tripo multiview slots.`, 'success');
   } catch (error) {
     showToast(
       String(error?.message || error).includes('Receiving end does not exist')
@@ -311,7 +356,7 @@ async function fillCurrentSetToTripo() {
     );
   } finally {
     els.fill.textContent = 'Fill Tripo';
-    updateActions((getSets()[state.activeSet] || []));
+    updateActions(getSets()[state.activeSet] || []);
   }
 }
 
@@ -343,13 +388,15 @@ async function refreshTripoStatus() {
 async function deleteCurrentSet() {
   const sets = getSets();
   const current = sets[state.activeSet] || [];
-  if (!current.length || state.showAll) return;
+  const currentIds = current.filter((id) => typeof id === 'string' && id);
+  if (!currentIds.length || state.showAll) return;
 
   const setLabel = `SET ${pad(state.activeSet + 1)}`;
-  if (!confirm(`删除 ${setLabel} 及其中的 ${current.length} 张图片？`)) return;
+  if (!confirm(`删除 ${setLabel} 及其中的 ${currentIds.length} 张图片？`)) return;
 
-  await deleteImages(current);
-  state.order.splice(state.activeSet * 4, current.length);
+  await deleteImages(currentIds);
+  state.order.splice(state.activeSet * 4, 4);
+  trimTrailingEmptySlots();
 
   const remainingSets = getSets();
   state.activeSet = remainingSets.length
@@ -363,7 +410,7 @@ async function deleteCurrentSet() {
 }
 
 async function clearAll() {
-  if (!state.order.length) return;
+  if (!state.order.some((id) => typeof id === 'string' && id)) return;
   if (!confirm('删除全部组和所有图片？')) return;
   await clearImages();
   state = { order: [], activeSet: 0, showAll: false };
@@ -378,22 +425,33 @@ function getSets() {
   return sets;
 }
 
+function trimTrailingEmptySlots() {
+  while (state.order.length && !state.order[state.order.length - 1]) state.order.pop();
+}
+
 async function loadState() {
   const stored = await ext.storage.local.get(STORAGE_KEY);
   const saved = stored[STORAGE_KEY];
   if (!saved || typeof saved !== 'object') return;
-  state.order = Array.isArray(saved.order) ? saved.order.filter((id) => typeof id === 'string') : [];
+  state.order = Array.isArray(saved.order)
+    ? saved.order.map((id) => (typeof id === 'string' && id ? id : null))
+    : [];
+  trimTrailingEmptySlots();
   state.activeSet = Number.isInteger(saved.activeSet) ? saved.activeSet : 0;
   state.showAll = Boolean(saved.showAll);
 }
 
 async function saveState() {
+  trimTrailingEmptySlots();
   await ext.storage.local.set({ [STORAGE_KEY]: state });
 }
 
 async function sanitizeState() {
   const existing = new Set(await getAllImageIds());
-  state.order = state.order.filter((id) => existing.has(id));
+  state.order = state.order.map((id) => (
+    typeof id === 'string' && existing.has(id) ? id : null
+  ));
+  trimTrailingEmptySlots();
   await saveState();
 }
 
@@ -444,12 +502,13 @@ async function getAllImageIds() {
 }
 
 async function deleteImages(ids) {
-  if (!ids.length) return;
+  const validIds = (ids || []).filter((id) => typeof id === 'string' && id);
+  if (!validIds.length) return;
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_IMAGES, 'readwrite');
     const store = tx.objectStore(STORE_IMAGES);
-    for (const id of ids) store.delete(id);
+    for (const id of validIds) store.delete(id);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error || new Error('Delete transaction aborted.'));
