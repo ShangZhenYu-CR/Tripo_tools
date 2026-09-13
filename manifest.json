@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Tripo Multiview Paste",
-  "version": "0.3.2",
-  "description": "Paste clipboard images in 3- or 4-view sets and fill Tripo3D Multiview without using the Windows file picker.",
+  "version": "0.3.3",
+  "description": "Paste clipboard images in 3- or 4-view sets, optionally clear existing Tripo multiview images, and fill Tripo3D without using the Windows file picker.",
   "permissions": [
     "storage",
     "tabs",

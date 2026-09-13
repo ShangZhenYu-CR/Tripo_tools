@@ -188,6 +188,35 @@ button { font: inherit; }
   padding: 7px 12px;
   background: var(--bg-panel);
 }
+.footer-left,
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.footer-actions { flex: 0 0 auto; }
+.auto-clear-toggle {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  color: var(--muted);
+  font-size: 9px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.auto-clear-toggle input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
+}
 .chip {
   display: inline-flex;
   align-items: center;
@@ -204,17 +233,28 @@ button { font: inherit; }
 .chip-success { border-color: var(--success); color: var(--success); }
 .chip-warning { border-color: var(--warning); color: var(--warning); }
 .chip-danger { border-color: var(--danger); color: var(--danger); }
-.primary-btn {
+.primary-btn,
+.secondary-btn {
   height: 34px;
-  min-width: 120px;
-  border: 0;
+  min-width: 108px;
   border-radius: 8px;
-  background: var(--accent);
-  color: #fff;
   font-size: 10px;
   cursor: pointer;
 }
-.primary-btn:disabled { cursor: default; opacity: .38; }
+.primary-btn {
+  min-width: 120px;
+  border: 0;
+  background: var(--accent);
+  color: #fff;
+}
+.secondary-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--muted);
+}
+.secondary-btn:hover { border-color: #465363; color: var(--text); }
+.primary-btn:disabled,
+.secondary-btn:disabled { cursor: default; opacity: .38; }
 
 .toast {
   position: fixed;

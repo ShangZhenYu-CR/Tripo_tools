@@ -20,6 +20,18 @@ ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
+  if (message.type === 'TMP_CLEAR_MULTIVIEW') {
+    stagedImages.fill(null);
+    clearTripoMultiview()
+      .then(sendResponse)
+      .catch((error) => sendResponse({
+        ok: false,
+        error: String(error?.message || error),
+        diagnostic: inspectUploadUi()
+      }));
+    return true;
+  }
+
   if (message.type === 'TMP_STAGE_IMAGE') {
     try {
       const index = Number(message.index);
@@ -107,6 +119,175 @@ function toggleFloatingPanel() {
 
 function closeFloatingPanel() {
   document.getElementById(PANEL_HOST_ID)?.remove();
+}
+
+async function clearTripoMultiview() {
+  const resolution = resolveUploadInputs();
+  const roots = [];
+  const inputs = [];
+
+  if (resolution.mode === 'four-inputs') {
+    for (let index = 0; index < resolution.inputs.length; index++) {
+      const input = resolution.inputs[index];
+      inputs.push(input);
+      const root = findUploadSlotRoot(input, DIRECTION_ORDER[index]);
+      if (root && !roots.includes(root)) roots.push(root);
+    }
+  } else if (resolution.mode === 'single-multiple-input') {
+    inputs.push(resolution.input);
+    const root = findUploadSlotRoot(resolution.input, '');
+    if (root) roots.push(root);
+  } else {
+    for (const direction of DIRECTION_ORDER) {
+      const target = findDirectionalDropTarget(direction);
+      if (!target) continue;
+      const root = findUploadSlotRoot(target, direction);
+      if (root && !roots.includes(root)) roots.push(root);
+    }
+  }
+
+  const globalClear = findExplicitGlobalClearControl();
+  if (globalClear) {
+    safeClick(globalClear);
+    await wait(450);
+    return {
+      ok: true,
+      removed: 1,
+      strategy: 'global-clear-control',
+      diagnostic: inspectUploadUi()
+    };
+  }
+
+  const controls = [];
+  for (const root of roots) {
+    const control = findExplicitLocalClearControl(root);
+    if (control && !controls.includes(control)) controls.push(control);
+  }
+
+  for (const control of controls) {
+    safeClick(control);
+    await wait(180);
+  }
+
+  let resetInputs = 0;
+  for (const input of inputs) {
+    if (!input?.files?.length) continue;
+    const empty = new DataTransfer();
+    try {
+      setInputFiles(input, empty.files);
+      dispatchInputEvents(input);
+      resetInputs++;
+    } catch (_) {}
+  }
+
+  await wait(320);
+  const remaining = roots.filter(hasLikelyUploadedPreview).length;
+
+  if (remaining > 0 && controls.length === 0 && resetInputs === 0) {
+    return {
+      ok: false,
+      removed: 0,
+      remaining,
+      error: `Detected ${remaining} Tripo view${remaining === 1 ? '' : 's'} with images, but no safe remove control was found. Clear Tripo manually once and send a screenshot so the adapter can be updated.`,
+      diagnostic: inspectUploadUi()
+    };
+  }
+
+  return {
+    ok: true,
+    removed: controls.length,
+    resetInputs,
+    remaining,
+    strategy: controls.length ? 'per-slot-clear-controls' : (resetInputs ? 'reset-file-inputs' : 'already-clear'),
+    diagnostic: inspectUploadUi()
+  };
+}
+
+function findUploadSlotRoot(node, direction) {
+  let current = node instanceof Element ? node : null;
+  let best = current?.parentElement || current;
+
+  for (let depth = 0; current && depth < 8; depth++, current = current.parentElement) {
+    if (!(current instanceof HTMLElement)) continue;
+    const rect = current.getBoundingClientRect();
+    if (rect.width < 80 || rect.height < 60) continue;
+
+    const text = getNodeDescriptor(current).toLowerCase();
+    if (!direction || directionMatches(direction, text) || current.querySelector('img,canvas,[style*="background-image"]')) {
+      best = current;
+    }
+
+    if (rect.width > Math.min(window.innerWidth * 0.8, 900) || rect.height > Math.min(window.innerHeight * 0.8, 700)) break;
+  }
+  return best || null;
+}
+
+function findExplicitGlobalClearControl() {
+  const pattern = /clear\s*all|remove\s*all|reset\s*(all|multiview|views?)|清空全部|全部清除|重置全部|清空多视图/i;
+  const candidates = [...document.querySelectorAll('button,[role="button"]')];
+  return candidates.find((node) => isRendered(node) && pattern.test(getNodeDescriptor(node))) || null;
+}
+
+function findExplicitLocalClearControl(root) {
+  if (!root?.querySelectorAll) return null;
+  const pattern = /\b(remove|delete|clear|discard|close)\b|移除|删除|清除|清空|关闭/i;
+  const candidates = [...root.querySelectorAll('button,[role="button"]')]
+    .filter(isRendered)
+    .map((node) => ({ node, descriptor: getNodeDescriptor(node) }))
+    .filter((entry) => pattern.test(entry.descriptor));
+
+  candidates.sort((a, b) => clearControlScore(b) - clearControlScore(a));
+  return candidates[0]?.node || null;
+}
+
+function clearControlScore(entry) {
+  const text = String(entry?.descriptor || '').toLowerCase();
+  let score = 0;
+  if (/remove|delete|clear|移除|删除|清除|清空/.test(text)) score += 20;
+  if (/aria-label|title|testid/.test(text)) score += 2;
+  if (/close|关闭/.test(text)) score += 4;
+  return score;
+}
+
+function getNodeDescriptor(node) {
+  if (!node) return '';
+  return [
+    node.textContent,
+    node.getAttribute?.('aria-label'),
+    node.getAttribute?.('title'),
+    node.getAttribute?.('data-testid'),
+    node.getAttribute?.('data-test-id'),
+    node.id,
+    typeof node.className === 'string' ? node.className : ''
+  ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function hasLikelyUploadedPreview(root) {
+  if (!root?.querySelectorAll) return false;
+  const candidates = [...root.querySelectorAll('img,canvas,[style*="background-image"]')];
+  return candidates.some((node) => {
+    if (!isRendered(node)) return false;
+    const rect = node.getBoundingClientRect();
+    if (rect.width < 64 || rect.height < 64) return false;
+    if (node.tagName === 'IMG') {
+      const src = String(node.getAttribute('src') || '');
+      if (!src || /logo|icon|avatar/i.test(src)) return false;
+    }
+    return true;
+  });
+}
+
+function safeClick(node) {
+  node.scrollIntoView?.({ block: 'center', inline: 'center' });
+  node.click();
+}
+
+function isRendered(node) {
+  if (!(node instanceof Element)) return false;
+  const style = getComputedStyle(node);
+  if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+  const rect = node.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
 }
 
 async function applyMultiview(images) {

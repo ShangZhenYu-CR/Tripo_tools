@@ -11,7 +11,7 @@
     <header class="topbar">
       <div>
         <div class="title">Tripo Multiview Paste</div>
-        <div class="subtitle">4 images = 1 set · FRONT / LEFT / RIGHT / BACK</div>
+        <div class="subtitle">3 or 4 images · FRONT / LEFT / RIGHT / BACK</div>
       </div>
       <div class="topbar-actions">
         <span id="tripo-status" class="chip chip-warning">TRIPO ?</span>
@@ -36,8 +36,17 @@
     </section>
 
     <footer class="footerbar">
-      <span id="set-status" class="chip chip-warning">0 / 4 COLLECTING</span>
-      <button id="fill-tripo" class="primary-btn" disabled>Fill Tripo</button>
+      <div class="footer-left">
+        <span id="set-status" class="chip chip-warning">0 / 4 COLLECTING</span>
+        <label class="auto-clear-toggle" title="Fill Tripo 前先清空 Tripo 当前多视图图片">
+          <input id="auto-clear-tripo" type="checkbox" checked />
+          <span>Fill 前清空</span>
+        </label>
+      </div>
+      <div class="footer-actions">
+        <button id="clear-tripo" class="secondary-btn" title="只清空 Tripo 当前多视图，不删除扩展里的图片">清空 Tripo</button>
+        <button id="fill-tripo" class="primary-btn" disabled>Fill Tripo</button>
+      </div>
     </footer>
 
     <div id="toast" class="toast" hidden></div>

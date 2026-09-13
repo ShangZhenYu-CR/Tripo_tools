@@ -4,20 +4,26 @@ const DB_NAME = 'tripo-multiview-paste';
 const DB_VERSION = 1;
 const STORE_IMAGES = 'images';
 const STORAGE_KEY = 'tmpPopupState';
+const SETTINGS_KEY = 'tmpSettings';
+const DEFAULT_SETTINGS = { autoClearBeforeFill: true };
 // Tripo's current Multiview order is FRONT / LEFT / RIGHT / BACK.
 const DIRECTIONS = ['FRONT', 'LEFT', 'RIGHT', 'BACK'];
 const MIN_SEND_VIEWS = 3;
 
 let dbPromise = null;
 let state = { order: [], activeSet: 0, showAll: false };
+let settings = { ...DEFAULT_SETTINGS };
 let objectUrls = [];
 let dragSourceIndex = null;
 let toastTimer = null;
+let transferBusy = false;
 
 const els = {
   tabs: document.getElementById('set-tabs'),
   setStatus: document.getElementById('set-status'),
   fill: document.getElementById('fill-tripo'),
+  clearTripo: document.getElementById('clear-tripo'),
+  autoClearTripo: document.getElementById('auto-clear-tripo'),
   single: document.getElementById('single-set-view'),
   grid: document.getElementById('view-grid'),
   all: document.getElementById('all-sets-view'),
@@ -33,6 +39,7 @@ boot().catch((error) => showToast(String(error?.message || error), 'error'));
 async function boot() {
   await openDb();
   await loadState();
+  await loadSettings();
   await sanitizeState();
   bindEvents();
   await render();
@@ -42,6 +49,11 @@ async function boot() {
 function bindEvents() {
   window.addEventListener('paste', handlePaste);
   els.fill.addEventListener('click', fillCurrentSetToTripo);
+  els.clearTripo.addEventListener('click', clearTripoOnly);
+  els.autoClearTripo.addEventListener('change', async () => {
+    settings.autoClearBeforeFill = Boolean(els.autoClearTripo.checked);
+    await saveSettings();
+  });
   els.clearCurrent.addEventListener('click', deleteCurrentSet);
   els.clearAll.addEventListener('click', clearAll);
 }
@@ -298,9 +310,43 @@ function updateActions(set) {
   const ready = count >= MIN_SEND_VIEWS;
   els.setStatus.className = `chip ${ready ? 'chip-success' : 'chip-warning'}`;
   els.setStatus.textContent = ready ? `${count} / 4 READY` : `${count} / 4 COLLECTING`;
-  els.fill.disabled = !ready || state.showAll;
+  els.fill.disabled = transferBusy || !ready || state.showAll;
+  els.clearTripo.disabled = transferBusy;
   els.clearCurrent.disabled = state.showAll || count === 0;
   els.clearAll.disabled = !state.order.some((id) => typeof id === 'string' && id);
+}
+
+async function clearTripoOnly() {
+  const tab = await findTripoTab();
+  if (!tab?.id) {
+    showToast('Open Tripo3D Multiview in another tab first.', 'error');
+    await refreshTripoStatus();
+    return;
+  }
+
+  transferBusy = true;
+  els.clearTripo.textContent = 'Clearing…';
+  updateActions(getSets()[state.activeSet] || []);
+  try {
+    const result = await ext.tabs.sendMessage(tab.id, { type: 'TMP_CLEAR_MULTIVIEW' });
+    if (!result?.ok) {
+      const detail = result?.diagnostic ? `\n${JSON.stringify(result.diagnostic)}` : '';
+      throw new Error((result?.error || 'Unable to clear Tripo.') + detail);
+    }
+    const removed = Number(result.removed || 0);
+    showToast(removed ? `Cleared ${removed} Tripo view${removed === 1 ? '' : 's'}.` : 'Tripo multiview is already clear.', 'success');
+  } catch (error) {
+    showToast(
+      String(error?.message || error).includes('Receiving end does not exist')
+        ? 'Refresh the Tripo tab once after installing/updating this extension.'
+        : String(error?.message || error),
+      'error'
+    );
+  } finally {
+    transferBusy = false;
+    els.clearTripo.textContent = '清空 Tripo';
+    updateActions(getSets()[state.activeSet] || []);
+  }
 }
 
 async function fillCurrentSetToTripo() {
@@ -315,9 +361,18 @@ async function fillCurrentSetToTripo() {
     return;
   }
 
-  els.fill.disabled = true;
+  transferBusy = true;
   els.fill.textContent = 'Filling…';
+  updateActions(set);
   try {
+    if (settings.autoClearBeforeFill !== false) {
+      const cleared = await ext.tabs.sendMessage(tab.id, { type: 'TMP_CLEAR_MULTIVIEW' });
+      if (!cleared?.ok) {
+        const detail = cleared?.diagnostic ? `\n${JSON.stringify(cleared.diagnostic)}` : '';
+        throw new Error((cleared?.error || 'Auto-clear Tripo failed.') + detail);
+      }
+    }
+
     const reset = await ext.tabs.sendMessage(tab.id, { type: 'TMP_RESET_MULTIVIEW' });
     if (!reset?.ok) throw new Error('Refresh the Tripo tab once after updating this extension.');
 
@@ -355,6 +410,7 @@ async function fillCurrentSetToTripo() {
       'error'
     );
   } finally {
+    transferBusy = false;
     els.fill.textContent = 'Fill Tripo';
     updateActions(getSets()[state.activeSet] || []);
   }
@@ -444,6 +500,16 @@ async function loadState() {
 async function saveState() {
   trimTrailingEmptySlots();
   await ext.storage.local.set({ [STORAGE_KEY]: state });
+}
+
+async function loadSettings() {
+  const stored = await ext.storage.local.get(SETTINGS_KEY);
+  settings = { ...DEFAULT_SETTINGS, ...(stored[SETTINGS_KEY] || {}) };
+  els.autoClearTripo.checked = settings.autoClearBeforeFill !== false;
+}
+
+async function saveSettings() {
+  await ext.storage.local.set({ [SETTINGS_KEY]: settings });
 }
 
 async function sanitizeState() {
