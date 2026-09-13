@@ -12,6 +12,13 @@ A standalone Edge extension for clipboard-first Tripo3D Multiview uploads.
 - CRX package: [Download TripoMultiviewPaste-v0.3.1.crx](https://github.com/ShangZhenYu-CR/Tripo_tools/releases/download/v0.3.1/TripoMultiviewPaste-v0.3.1.crx)
 - Release notes: [v0.3.1 on GitHub Releases](https://github.com/ShangZhenYu-CR/Tripo_tools/releases/tag/v0.3.1)
 
+### Development version
+
+- `v0.3.2`
+- Adds sparse 3-view sets: any one of `FRONT / LEFT / RIGHT / BACK` may be empty.
+- Empty slots are valid drag targets, so a 3-view set can place an image directly into `BACK` without forcing all four views to exist.
+- `Fill Tripo` is enabled for both 3-view and 4-view sets, and empty directions are skipped without shifting later views into the wrong slot.
+
 ### Current workflow
 
 1. Open Tripo3D and switch to **Multiview** mode.
@@ -20,15 +27,15 @@ A standalone Edge extension for clipboard-first Tripo3D Multiview uploads.
 4. Refresh the already-open Tripo tab once after installing or updating the extension.
 5. Click the **Tripo Multiview Paste** extension icon.
 6. Paste images with `Ctrl+V`.
-7. Every 4 images automatically become one set.
+7. Images are collected into four directional slots per set. A set may contain either 3 or 4 images.
 8. The verified Tripo order is:
    - `FRONT`
    - `LEFT`
    - `RIGHT`
    - `BACK`
-9. Drag cards within the current set if the order needs correction.
+9. Drag cards within the current set to correct the direction. Empty slots also accept drops.
 10. Use the small `SET 01 / SET 02 / ... / ALL SETS` buttons to switch sets.
-11. Click **Fill Tripo** to populate the current set into the Tripo Multiview upload UI.
+11. Click **Fill Tripo** when the current set has at least 3 images. Only occupied directions are sent.
 
 ### Floating panel UI
 
@@ -40,11 +47,14 @@ The four current views occupy most of the panel as a 2 × 2 grid. `ALL SETS` is 
 
 - Images are stored in the extension's own IndexedDB.
 - Set order/state is stored in the extension's own `storage.local`.
+- Sparse slots are preserved, so moving an image to `BACK` does not collapse the set back into sequential order.
 - It does not depend on Reference Hub, Reference Image Downloader, Native Messaging, a local server, or Tripo API keys.
 
 ### Tripo transfer
 
-Each image is sent to the Tripo content script one at a time, then the four-view set is committed. The adapter first tries to resolve upload slots from nearby direction labels; if the page only exposes four generic image inputs, the verified fallback order is `FRONT / LEFT / RIGHT / BACK`.
+Each occupied image is sent to the Tripo content script one at a time, then the set is committed. Both 3-view and 4-view sets are supported. Empty directions are not sent, and later views keep their original directional slot instead of shifting forward.
+
+The adapter first tries to resolve upload slots from nearby direction labels; if the page exposes four generic image inputs, the verified fallback order is `FRONT / LEFT / RIGHT / BACK`.
 
 If Tripo changes its DOM and the adapter cannot safely resolve the upload targets, the panel shows an error and the content script returns a diagnostic instead of silently filling uncertain inputs.
 
@@ -63,7 +73,7 @@ Run `pack-extension.cmd` on Windows to build a CRX with the local Edge executabl
 - `background.js` — action click handler that toggles the Tripo in-page panel
 - `popup.html` — floating panel shell
 - `popup.css` — ColdRain-style panel UI
-- `popup.js` — clipboard grouping, IndexedDB persistence, set navigation, drag reorder, Tripo transfer
+- `popup.js` — clipboard grouping, IndexedDB persistence, sparse set slots, drag reorder, Tripo transfer
 - `panel-close.js` — closes the in-page floating panel
 - `content-tripo.js` — Tripo page upload adapter and floating panel host
 - `pack-extension.cmd` / `pack-extension.ps1` — local CRX packaging helpers
