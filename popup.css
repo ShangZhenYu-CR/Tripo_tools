@@ -104,6 +104,7 @@ button { font: inherit; }
 .set-tab:hover { border-color: #3c4857; color: var(--text); }
 .set-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .set-tab.collecting { border-color: var(--warning); color: var(--warning); }
+.set-tab.partial-ready { border-color: var(--success); color: var(--success); }
 
 .control-actions {
   display: flex;
