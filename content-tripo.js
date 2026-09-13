@@ -1,6 +1,7 @@
 const ext = globalThis.browser ?? globalThis.chrome;
 // Current Tripo Multiview slot order verified by the real page: FRONT / LEFT / RIGHT / BACK.
 const DIRECTION_ORDER = ['front', 'left', 'right', 'back'];
+const MIN_SEND_VIEWS = 3;
 const stagedImages = new Array(4).fill(null);
 const PANEL_HOST_ID = 'tripo-multiview-paste-floating-panel';
 
@@ -10,6 +11,12 @@ ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'TMP_TOGGLE_PANEL') {
     const open = toggleFloatingPanel();
     sendResponse({ ok: true, open });
+    return;
+  }
+
+  if (message.type === 'TMP_RESET_MULTIVIEW') {
+    stagedImages.fill(null);
+    sendResponse({ ok: true });
     return;
   }
 
@@ -103,48 +110,73 @@ function closeFloatingPanel() {
 }
 
 async function applyMultiview(images) {
-  if (!Array.isArray(images) || images.length !== 4 || images.some((image) => !image?.dataUrl)) {
-    throw new Error('Expected exactly 4 staged multiview images.');
+  if (!Array.isArray(images) || images.length !== 4) {
+    throw new Error('Expected a four-slot multiview payload.');
   }
 
-  const normalized = DIRECTION_ORDER.map((direction, index) => ({
-    direction,
-    file: dataUrlToFile(
-      images[index].dataUrl,
-      images[index].name || `${direction}.png`,
-      images[index].type
-    )
-  }));
+  const normalized = DIRECTION_ORDER.map((direction, index) => {
+    const image = images[index];
+    if (!image?.dataUrl) return null;
+    return {
+      direction,
+      file: dataUrlToFile(
+        image.dataUrl,
+        image.name || `${direction}.png`,
+        image.type
+      )
+    };
+  });
+
+  const provided = normalized.filter(Boolean);
+  if (provided.length < MIN_SEND_VIEWS) {
+    throw new Error(`Expected at least ${MIN_SEND_VIEWS} multiview images.`);
+  }
 
   const resolution = resolveUploadInputs();
   if (resolution.mode === 'four-inputs') {
     for (let i = 0; i < 4; i++) {
-      await applyFileToInput(resolution.inputs[i], normalized[i].file);
+      const entry = normalized[i];
+      if (!entry) continue;
+      await applyFileToInput(resolution.inputs[i], entry.file);
       await wait(180);
     }
     return {
       ok: true,
-      message: 'Filled Tripo multiview inputs.',
+      message: `Filled ${provided.length} Tripo multiview slots.`,
       strategy: resolution.strategy,
-      order: DIRECTION_ORDER
+      order: DIRECTION_ORDER,
+      populatedDirections: provided.map((entry) => entry.direction)
     };
   }
 
   if (resolution.mode === 'single-multiple-input') {
-    await applyFilesToInput(resolution.input, normalized.map((entry) => entry.file));
-    return {
-      ok: true,
-      message: 'Filled Tripo multiview input with 4 files.',
-      strategy: 'single-multiple-input',
-      order: DIRECTION_ORDER
-    };
+    const populatedIndices = normalized
+      .map((entry, index) => entry ? index : -1)
+      .filter((index) => index >= 0);
+    const isPrefix = populatedIndices.every((index, position) => index === position);
+
+    if (isPrefix) {
+      await applyFilesToInput(resolution.input, provided.map((entry) => entry.file));
+      return {
+        ok: true,
+        message: `Filled Tripo multiview input with ${provided.length} files.`,
+        strategy: 'single-multiple-input',
+        order: DIRECTION_ORDER,
+        populatedDirections: provided.map((entry) => entry.direction)
+      };
+    }
+
+    const directionalDrop = await tryDirectionalDropZones(normalized);
+    if (directionalDrop.ok) return directionalDrop;
+
+    throw new Error('Tripo exposes one multi-file input, so a missing middle direction cannot be preserved safely.');
   }
 
   const dropResult = await tryDirectionalDropZones(normalized);
   if (dropResult.ok) return dropResult;
 
   throw new Error(
-    `Could not resolve four Tripo image upload targets. Open Tripo Multiview mode first. Inputs found: ${resolution.totalInputs}.`
+    `Could not resolve Tripo image upload targets. Open Tripo Multiview mode first. Inputs found: ${resolution.totalInputs}.`
   );
 }
 
@@ -271,14 +303,15 @@ function dispatchInputEvents(input) {
 }
 
 async function tryDirectionalDropZones(entries) {
+  const populated = (entries || []).filter(Boolean);
   const targets = {};
-  for (const entry of entries) {
+  for (const entry of populated) {
     const target = findDirectionalDropTarget(entry.direction);
     if (!target) return { ok: false };
     targets[entry.direction] = target;
   }
 
-  for (const entry of entries) {
+  for (const entry of populated) {
     const dt = new DataTransfer();
     dt.items.add(entry.file);
     for (const type of ['dragenter', 'dragover', 'drop']) {
@@ -294,9 +327,10 @@ async function tryDirectionalDropZones(entries) {
 
   return {
     ok: true,
-    message: 'Dropped 4 views into Tripo multiview zones.',
+    message: `Dropped ${populated.length} views into Tripo multiview zones.`,
     strategy: 'directional-drop-zones',
-    order: DIRECTION_ORDER
+    order: DIRECTION_ORDER,
+    populatedDirections: populated.map((entry) => entry.direction)
   };
 }
 
